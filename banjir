@@ -90,7 +90,7 @@ void sendData() {
     lcd.setCursor(0, 1);
     lcd.print("Sts: ");
     lcd.print(statusBanjir);
-    lcd.print("        "); // Pembersih sisa karakter halaman sebelah
+    lcd.print("        "); 
 
     lcdPage = 1; // Set ke halaman berikutnya untuk detik depan
   } 
@@ -105,7 +105,7 @@ void sendData() {
     lcd.print("Cuaca: ");
     lcd.print(kondisiHujan);
 
-    lcdPage = 0; // Kembalikan ke halaman pertama untuk detik depan
+    lcdPage = 0;
   }
 
   // ===== 5. Serial Monitor =====
@@ -139,7 +139,7 @@ void setup() {
   lcd.print("Connecting...");
   
   WiFi.begin(ssid, pass);
-  Blynk.config(BLYNK_AUTH_TOKEN); // PERBAIKAN: Menggunakan nama variabel token yang benar
+  Blynk.config(BLYNK_AUTH_TOKEN);
 
   timer.setInterval(1000L, sendData); 
 }
