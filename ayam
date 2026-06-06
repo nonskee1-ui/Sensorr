@@ -1,0 +1,110 @@
+#include <DHT.h>
+
+#define DHTPIN 13       // D7 = GPIO13
+#define DHTTYPE DHT22
+
+#define TRIG_PIN 14     // D5 = GPIO14
+#define ECHO_PIN 12     // D6 = GPIO12
+#define BUZZER_PIN 4    // D2 = GPIO4
+#define RELAY_PIN 5     // D1 = GPIO5
+
+DHT dht(DHTPIN, DHTTYPE);
+
+// Ubah kalau hasilnya terbalik
+const bool BUZZER_ACTIVE_LOW = true;
+const bool RELAY_ACTIVE_LOW  = true;
+
+// Ambang batas
+const float TEMP_THRESHOLD = 20;   // Relay ON jika suhu >= 20°C
+const float DIST_THRESHOLD = 30.0;   // Buzzer ON jika jarak < 30 cm
+
+void buzzerON() {
+  digitalWrite(BUZZER_PIN, BUZZER_ACTIVE_LOW ? LOW : HIGH);
+}
+
+void buzzerOFF() {
+  digitalWrite(BUZZER_PIN, BUZZER_ACTIVE_LOW ? HIGH : LOW);
+}
+
+void relayON() {
+  digitalWrite(RELAY_PIN, RELAY_ACTIVE_LOW ? LOW : HIGH);
+}
+
+void relayOFF() {
+  digitalWrite(RELAY_PIN, RELAY_ACTIVE_LOW ? HIGH : LOW);
+}
+
+float readDistanceCM() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  unsigned long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+  if (duration == 0) return -1;
+
+  return duration * 0.0343 / 2.0;
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(RELAY_PIN, OUTPUT);
+
+  dht.begin();
+
+  buzzerOFF();
+  relayOFF();
+
+  Serial.println("Sistem peternakan ESP8266 aktif");
+}
+
+void loop() {
+  float distance = readDistanceCM();
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+
+  // Buzzer
+  if (distance > DIST_THRESHOLD) {
+    buzzerON();
+  } else {
+    buzzerOFF();
+  }
+
+  // Relay
+  if (!isnan(temperature)) {
+    if (temperature >= TEMP_THRESHOLD) {
+      relayON();
+      Serial.println("RELAY ON");
+    } else {
+      relayOFF();
+      Serial.println("RELAY OFF");
+    }
+
+    Serial.print("Temperature = ");
+    Serial.println(temperature);
+  } else {
+    relayOFF();
+    Serial.println("DHT ERROR");
+  }
+
+  Serial.print("Jarak: ");
+  if (distance > 0) Serial.print(distance);
+  else Serial.print("Error");
+
+  Serial.print(" cm | Suhu: ");
+  if (!isnan(temperature)) Serial.print(temperature);
+  else Serial.print("Error");
+
+  Serial.print(" C | Kelembapan: ");
+  if (!isnan(humidity)) Serial.print(humidity);
+  else Serial.print("Error");
+
+  Serial.println(" %");
+
+  delay(1000);
+}
