@@ -1,0 +1,152 @@
+#define BLYNK_TEMPLATE_ID "TMPL6xvsUdN-X"
+#define BLYNK_TEMPLATE_NAME "Sistem Pendeteksi Banjir"
+#define BLYNK_AUTH_TOKEN "-hw7OyMxOYgVMT6C3JplF0EFuos8tXoY"
+
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+char ssid[] = "JH";
+char pass[] = "jeha99999";
+
+#define rainPin 35 
+#define trigPin 5
+#define echoPin 18
+#define buzzerPin 23
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+BlynkTimer timer;
+
+bool buzzerState = false; 
+int lcdPage = 0; // Variabel bantu untuk perpindahan halaman LCD
+
+void sendData() {
+  // ===== 1. Baca & Konversi Sensor Hujan =====
+  int rainRaw = analogRead(rainPin);
+  int rainPercent = map(rainRaw, 4095, 0, 0, 100); 
+  
+  if (rainPercent < 0) rainPercent = 0;
+  if (rainPercent > 100) rainPercent = 100;
+
+  String kondisiHujan;
+  if (rainPercent == 0) {
+    kondisiHujan = "Cerah       ";
+  }
+  else if (rainPercent <= 30) {
+    kondisiHujan = "Gerimis     "; // Ditambah spasi untuk overwrite karakter LCD
+  }
+  else if (rainPercent <= 70) {
+    kondisiHujan = "Deras       ";
+  }
+  else {
+    kondisiHujan = "Badai       ";
+  }
+
+  // ===== 2. Baca Sensor Ultrasonik =====
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  long duration = pulseIn(echoPin, HIGH, 30000); 
+  float distance = duration * 0.034 / 2.0;
+
+  if (distance == 0) distance = 50; 
+
+  float tinggiAir = 50.0 - distance;
+  if (tinggiAir < 0) tinggiAir = 0; 
+
+  String statusBanjir;
+
+  // ===== 3. Logika Status & Buzzer Pasif =====
+  if (tinggiAir < 15) {
+    statusBanjir = "AMAN  "; 
+    ledcWriteTone(buzzerPin, 0); 
+  }
+  else if (tinggiAir < 35) {
+    statusBanjir = "SIAGA ";
+    buzzerState = !buzzerState; 
+    if (buzzerState) {
+      ledcWriteTone(buzzerPin, 1500); 
+    } else {
+      ledcWriteTone(buzzerPin, 0);    
+    }
+  }
+  else {
+    statusBanjir = "BANJIR";
+    ledcWriteTone(buzzerPin, 5000); 
+  }
+
+  // ===== 4. Tampilan LCD Bergantian (Rolling Page) =====
+  if (lcdPage == 0) {
+    // Tampilan Pertama: Air dan Status Banjir
+    lcd.setCursor(0, 0);
+    lcd.print("Air: ");
+    lcd.print(tinggiAir, 1);
+    lcd.print(" cm    "); 
+
+    lcd.setCursor(0, 1);
+    lcd.print("Sts: ");
+    lcd.print(statusBanjir);
+    lcd.print("        "); // Pembersih sisa karakter halaman sebelah
+
+    lcdPage = 1; // Set ke halaman berikutnya untuk detik depan
+  } 
+  else {
+    // Tampilan Kedua: Intensitas Hujan dan Kondisinya
+    lcd.setCursor(0, 0);
+    lcd.print("Hujan: ");
+    lcd.print(rainPercent);
+    lcd.print("%      "); 
+
+    lcd.setCursor(0, 1);
+    lcd.print("Cuaca: ");
+    lcd.print(kondisiHujan);
+
+    lcdPage = 0; // Kembalikan ke halaman pertama untuk detik depan
+  }
+
+  // ===== 5. Serial Monitor =====
+  Serial.print("Kondisi Hujan: "); Serial.print(kondisiHujan);
+  Serial.print(" ("); Serial.print(rainPercent); Serial.print("%)");
+  Serial.print(" | Air: "); Serial.print(tinggiAir);
+  Serial.print(" cm | Status: "); Serial.println(statusBanjir);
+
+  // ===== 6. Kirim ke Blynk =====
+  if (Blynk.connected()) {
+    Blynk.virtualWrite(V0, rainPercent);  
+    Blynk.virtualWrite(V1, tinggiAir);    
+    Blynk.virtualWrite(V2, statusBanjir);       
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+
+  ledcAttach(buzzerPin, 2000, 8); 
+
+  Wire.begin(21, 22);
+
+  lcd.init();
+  lcd.backlight();
+  
+  lcd.setCursor(0, 0);
+  lcd.print("Connecting...");
+  
+  WiFi.begin(ssid, pass);
+  Blynk.config(BLYNK_AUTH_TOKEN); // PERBAIKAN: Menggunakan nama variabel token yang benar
+
+  timer.setInterval(1000L, sendData); 
+}
+
+void loop() {
+  if (WiFi.status() == WL_CONNECTED) {
+    Blynk.run();
+  }
+  timer.run();
+}
